@@ -87,6 +87,13 @@ export interface DefinitionSettings {
   allowTokenOverride?: string[];
   /** Friendly names for colour tokens in the card editors ("Brand colour"). */
   tokenLabels?: Record<string, string>;
+  /**
+   * Display order of the colour tokens (builder list + card editors). Stored
+   * as an array because the database (jsonb) re-sorts object keys, so the
+   * key order of `tokens.color` cannot carry an order. Unlisted colours
+   * follow in key order.
+   */
+  tokenOrder?: string[];
   /** Design keys unlocked to the user on every widget unless overridden. */
   defaultUserOptions?: string[];
   /** Extra `<html>`-level colour scheme hint. */
@@ -271,6 +278,24 @@ function humanizeToken(name: string): string {
  *
  * Templates that never chose any fall back to the classic four.
  */
+/**
+ * The template's colour token names in display order: `settings.tokenOrder`
+ * first (skipping names that no longer exist), then any remaining colours.
+ */
+export function orderedColorNames(
+  def: Partial<TemplateDefinition> | Record<string, unknown> | null | undefined,
+): string[] {
+  const d = (def ?? {}) as Partial<TemplateDefinition>;
+  const table = (d.tokens?.color ?? {}) as Record<string, string>;
+  const keys = Object.keys(table);
+  const order = Array.isArray(d.settings?.tokenOrder)
+    ? d.settings!.tokenOrder!.filter(
+        (n, i, all) => typeof n === "string" && n in table && all.indexOf(n) === i,
+      )
+    : [];
+  return [...order, ...keys.filter((n) => !order.includes(n))];
+}
+
 export function editableThemeColors(
   def: Partial<TemplateDefinition> | Record<string, unknown> | null | undefined,
 ): EditableThemeColor[] {
@@ -282,7 +307,7 @@ export function editableThemeColors(
     : [];
   // In the order the designer arranged the colours in the builder.
   const names = chosen.length
-    ? Object.keys(table).filter((n) => chosen.includes(n))
+    ? orderedColorNames(d).filter((n) => chosen.includes(n))
     : LEGACY_THEME_COLORS;
   return names.map((name) => ({
     name,

@@ -10,6 +10,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.DEFINITION_LIMITS = exports.TOKEN_PREFIX = exports.TOKEN_GROUPS = exports.SCHEMA_VERSION = void 0;
 exports.blankDefinition = blankDefinition;
 exports.definitionRoots = definitionRoots;
+exports.orderedColorNames = orderedColorNames;
 exports.editableThemeColors = editableThemeColors;
 exports.SCHEMA_VERSION = 2;
 exports.TOKEN_GROUPS = [
@@ -138,6 +139,19 @@ function humanizeToken(name) {
  *
  * Templates that never chose any fall back to the classic four.
  */
+/**
+ * The template's colour token names in display order: `settings.tokenOrder`
+ * first (skipping names that no longer exist), then any remaining colours.
+ */
+function orderedColorNames(def) {
+    const d = (def ?? {});
+    const table = (d.tokens?.color ?? {});
+    const keys = Object.keys(table);
+    const order = Array.isArray(d.settings?.tokenOrder)
+        ? d.settings.tokenOrder.filter((n, i, all) => typeof n === "string" && n in table && all.indexOf(n) === i)
+        : [];
+    return [...order, ...keys.filter((n) => !order.includes(n))];
+}
 function editableThemeColors(def) {
     const d = (def ?? {});
     const table = (d.tokens?.color ?? {});
@@ -147,7 +161,7 @@ function editableThemeColors(def) {
         : [];
     // In the order the designer arranged the colours in the builder.
     const names = chosen.length
-        ? Object.keys(table).filter((n) => chosen.includes(n))
+        ? orderedColorNames(d).filter((n) => chosen.includes(n))
         : LEGACY_THEME_COLORS;
     return names.map((name) => ({
         name,

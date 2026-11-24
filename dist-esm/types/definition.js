@@ -132,6 +132,19 @@ function humanizeToken(name) {
  *
  * Templates that never chose any fall back to the classic four.
  */
+/**
+ * The template's colour token names in display order: `settings.tokenOrder`
+ * first (skipping names that no longer exist), then any remaining colours.
+ */
+export function orderedColorNames(def) {
+    const d = (def ?? {});
+    const table = (d.tokens?.color ?? {});
+    const keys = Object.keys(table);
+    const order = Array.isArray(d.settings?.tokenOrder)
+        ? d.settings.tokenOrder.filter((n, i, all) => typeof n === "string" && n in table && all.indexOf(n) === i)
+        : [];
+    return [...order, ...keys.filter((n) => !order.includes(n))];
+}
 export function editableThemeColors(def) {
     const d = (def ?? {});
     const table = (d.tokens?.color ?? {});
@@ -141,7 +154,7 @@ export function editableThemeColors(def) {
         : [];
     // In the order the designer arranged the colours in the builder.
     const names = chosen.length
-        ? Object.keys(table).filter((n) => chosen.includes(n))
+        ? orderedColorNames(d).filter((n) => chosen.includes(n))
         : LEGACY_THEME_COLORS;
     return names.map((name) => ({
         name,

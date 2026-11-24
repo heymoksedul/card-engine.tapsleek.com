@@ -135,6 +135,18 @@ function validateDefinition(input, options = {}) {
             }
         }
     }
+    if (def.settings?.tokenOrder !== undefined) {
+        const order = def.settings.tokenOrder;
+        if (!Array.isArray(order)) {
+            fail("settings.tokenOrder", "must be an array");
+        }
+        else {
+            order.forEach((n, i) => {
+                if (typeof n !== "string" || !value_1.IDENT_RE.test(n))
+                    fail(`settings.tokenOrder.${i}`, "token name must be [A-Za-z0-9_-]");
+            });
+        }
+    }
     if (def.settings?.tokenLabels !== undefined) {
         const labels = def.settings.tokenLabels;
         if (!labels || typeof labels !== "object" || Array.isArray(labels)) {
