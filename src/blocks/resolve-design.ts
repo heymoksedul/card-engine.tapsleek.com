@@ -1,6 +1,6 @@
 import { isCoreWidget } from "../render/card-visibility";
 import { definitionRoots, type TemplateDefinition } from "../types/definition";
-import { isWidget, walkTreeOrder, type ElementNode } from "../types/node";
+import { isWidget, walkTreeOrder, type ElementNode, type Node } from "../types/node";
 import type { StyleSet } from "../types/style";
 import { getWidgetMeta, normalizeWidgetType } from "../widgets/registry";
 
@@ -21,6 +21,50 @@ type Instance = {
   rootHidden?: Partial<Record<"base" | "sm" | "md", boolean>>;
 };
 
+/**
+ * Tree order like `walkTreeOrder`, but also descends into each widget's own
+ * `layout`. Widgets can nest — CONNECT_BUTTONS usually lives inside the
+ * PROFILE widget's layout — and a lookup that skips layouts never finds them.
+ */
+function walkWithLayouts(node: Node, visit: (n: Node) => void): void {
+  walkTreeOrder(node, (n) => {
+    visit(n);
+    if (isWidget(n) && n.layout) walkWithLayouts(n.layout, visit);
+  });
+}
+
+/**
+ * Text styling a placeholder must not hand to other block types. The
+ * placeholder is usually a section title, so its font, size and case would
+ * otherwise land on buttons, images and icons the user adds.
+ */
+const TYPOGRAPHY_PROPS = [
+  "color",
+  "fontFamily",
+  "fontSize",
+  "fontWeight",
+  "fontStyle",
+  "lineHeight",
+  "letterSpacing",
+  "textTransform",
+  "textAlign",
+  "textDecoration",
+  "textGradient",
+  "whiteSpace",
+] as const;
+
+function withoutTypography(style: StyleSet | undefined): StyleSet | undefined {
+  if (!style) return style;
+  const out: StyleSet = {};
+  for (const [layer, props] of Object.entries(style)) {
+    if (!props || typeof props !== "object") continue;
+    const clean: Record<string, unknown> = { ...(props as Record<string, unknown>) };
+    for (const key of TYPOGRAPHY_PROPS) delete clean[key];
+    if (Object.keys(clean).length) (out as any)[layer] = clean;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 /** First widget instance of `type` found in the template tree, if any. */
 function templateInstance(
   def: TemplateDefinition,
@@ -30,7 +74,7 @@ function templateInstance(
   const lowerType = type.toLowerCase();
   for (const root of definitionRoots(def)) {
     let matched: Instance | null = null;
-    walkTreeOrder(root, (n) => {
+    walkWithLayouts(root, (n) => {
       if (matched) return;
       if (isWidget(n)) {
         const wNorm = normalizeWidgetType(n.widget).toUpperCase();
@@ -117,8 +161,9 @@ export function resolveBlockDesign(
     if (placeholder) {
       // Fallback to the placeholder's explicitly authored root styles, so generic
       // spacing/borders apply to all user blocks even if they don't match the placeholder's type.
+      // Box styles only: its text styling belongs to that widget, not to this type.
       inst = {
-        rootStyle: placeholder.rootStyle,
+        rootStyle: withoutTypography(placeholder.rootStyle),
         rootHidden: placeholder.rootHidden,
       };
     }

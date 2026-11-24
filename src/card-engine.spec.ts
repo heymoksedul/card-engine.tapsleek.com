@@ -1063,6 +1063,69 @@ describe("blocks: resolveBlockDesign", () => {
     expect(Object.keys(d.partStyles).length).toBeGreaterThan(0);
   });
 
+  // A template where CONNECT_BUTTONS sits inside the PROFILE widget's layout
+  // and the first optional widget is a typographic section title.
+  const nestedDef = (): TemplateDefinition => {
+    const def = blankDefinition("t");
+    def.root.children = [
+      {
+        kind: "widget", id: "wProfile", widget: "PROFILE", key: "profile", label: "Profile",
+        layout: {
+          kind: "element", id: "profileL", tag: "stack",
+          children: [
+            {
+              kind: "widget", id: "wConnect", widget: "CONNECT_BUTTONS", key: "connect_buttons", label: "Connect",
+              layout: {
+                kind: "element", id: "connectL", tag: "stack",
+                style: { base: { display: "flex", gap: "10px" } },
+                children: [],
+              },
+            } as WidgetNode,
+          ],
+        },
+      } as WidgetNode,
+      {
+        kind: "widget", id: "wTitle", widget: "TITLE", key: "about_title", label: "About Title",
+        style: {
+          base: {
+            fontSize: "28px", fontFamily: "{font.heading}", textTransform: "uppercase",
+            letterSpacing: "-0.3px", color: "{color.text}", margin: { b: "12px" },
+          },
+        },
+      } as WidgetNode,
+    ];
+    return def;
+  };
+
+  it("finds a widget nested inside another widget's layout", () => {
+    const d = resolveBlockDesign(nestedDef(), "CONNECT_BUTTONS");
+    expect(d.hasCustomLayout).toBe(true);
+    expect(d.layout?.id).toBe("connectL");
+  });
+
+  it("a placeholder lends its box styles but never its typography", () => {
+    // IMAGE isn't in the template, so it falls back to the placeholder (the title).
+    const d = resolveBlockDesign(nestedDef(), "IMAGE");
+    const base = (d.rootStyle?.base ?? {}) as Record<string, unknown>;
+    expect(base.margin).toBeTruthy();
+    expect(base.fontSize).toBeUndefined();
+    expect(base.fontFamily).toBeUndefined();
+    expect(base.textTransform).toBeUndefined();
+    expect(base.letterSpacing).toBeUndefined();
+    expect(base.color).toBeUndefined();
+  });
+
+  it("connect buttons don't inherit the section title's font in the compiled CSS", () => {
+    const { css } = compileCss(nestedDef(), { emitBlockPresets: "all" });
+    const rules = css.split("}").filter((r) => /\.tsb-CONNECT_BUTTONS[,{ ]/.test(r) || r.includes(".tsb-CONNECT_BUTTONS{"));
+    for (const r of rules) {
+      expect(r).not.toContain("font-size:28px");
+      expect(r).not.toContain("text-transform:uppercase");
+    }
+    // The title itself keeps its styling.
+    expect(css).toContain("text-transform:uppercase");
+  });
+
   it("blockClass is a safe, type-scoped class", () => {
     expect(blockClass("SERVICE_LIST")).toBe("tsb-SERVICE_LIST");
     expect(blockClass("a b;{}")).toBe("tsb-ab");
