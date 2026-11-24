@@ -36,6 +36,7 @@ const NODE_ACTIONS = new Set([
     "carousel-prev",
     "carousel-next",
     "carousel-dot",
+    "list-toggle",
 ]);
 const POPUP_TRIGGERS = new Set(["onLoad", "afterDelay", "onExit", "manual"]);
 export function validateDefinition(input, options = {}) {
