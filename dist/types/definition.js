@@ -7,7 +7,7 @@
  * by `compileCss()` on publish and served immutably from R2.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DEFINITION_LIMITS = exports.TOKEN_PREFIX = exports.TOKEN_GROUPS = exports.SCHEMA_VERSION = void 0;
+exports.CORE_COLOR_ORDER = exports.DEFINITION_LIMITS = exports.TOKEN_PREFIX = exports.TOKEN_GROUPS = exports.SCHEMA_VERSION = void 0;
 exports.blankDefinition = blankDefinition;
 exports.definitionRoots = definitionRoots;
 exports.orderedColorNames = orderedColorNames;
@@ -118,10 +118,11 @@ function blankDefinition(name) {
 function definitionRoots(def) {
     return [def.root, ...(def.popups ?? []).map((p) => p.root)];
 }
-const LEGACY_THEME_COLORS = ["bg", "primary", "text", "border"];
+const LEGACY_THEME_COLORS = ["primary", "bg", "text", "border"];
 const LEGACY_LABELS = {
-    bg: "Background Color",
     primary: "Primary Color",
+    secondary: "Secondary Color",
+    bg: "Background Color",
     text: "Text Color",
     border: "Border Color",
 };
@@ -139,18 +140,26 @@ function humanizeToken(name) {
  *
  * Templates that never chose any fall back to the classic four.
  */
+/** The core colours, always listed first and in this order in every template. */
+exports.CORE_COLOR_ORDER = ["primary", "secondary", "bg", "text"];
 /**
- * The template's colour token names in display order: `settings.tokenOrder`
- * first (skipping names that no longer exist), then any remaining colours.
+ * The template's colour token names in display order: the core colours
+ * (primary, secondary, bg, text) first, then `settings.tokenOrder`, then any
+ * remaining colours. Names that don't exist in the template are skipped.
  */
 function orderedColorNames(def) {
     const d = (def ?? {});
     const table = (d.tokens?.color ?? {});
-    const keys = Object.keys(table);
-    const order = Array.isArray(d.settings?.tokenOrder)
-        ? d.settings.tokenOrder.filter((n, i, all) => typeof n === "string" && n in table && all.indexOf(n) === i)
-        : [];
-    return [...order, ...keys.filter((n) => !order.includes(n))];
+    const out = [];
+    const add = (n) => {
+        if (typeof n === "string" && n in table && !out.includes(n))
+            out.push(n);
+    };
+    exports.CORE_COLOR_ORDER.forEach(add);
+    if (Array.isArray(d.settings?.tokenOrder))
+        d.settings.tokenOrder.forEach(add);
+    Object.keys(table).forEach(add);
+    return out;
 }
 function editableThemeColors(def) {
     const d = (def ?? {});

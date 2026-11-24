@@ -155,9 +155,12 @@ export interface EditableThemeColor {
  *
  * Templates that never chose any fall back to the classic four.
  */
+/** The core colours, always listed first and in this order in every template. */
+export declare const CORE_COLOR_ORDER: readonly ["primary", "secondary", "bg", "text"];
 /**
- * The template's colour token names in display order: `settings.tokenOrder`
- * first (skipping names that no longer exist), then any remaining colours.
+ * The template's colour token names in display order: the core colours
+ * (primary, secondary, bg, text) first, then `settings.tokenOrder`, then any
+ * remaining colours. Names that don't exist in the template are skipped.
  */
 export declare function orderedColorNames(def: Partial<TemplateDefinition> | Record<string, unknown> | null | undefined): string[];
 export declare function editableThemeColors(def: Partial<TemplateDefinition> | Record<string, unknown> | null | undefined): EditableThemeColor[];
