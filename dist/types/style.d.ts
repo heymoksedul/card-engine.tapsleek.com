@@ -25,9 +25,10 @@ export type StyleValue = string | number;
 export type Breakpoint = "base" | "sm" | "md";
 /**
  * `first` / `last` style the first / last item of a list (a repeated item or
- * any child) — e.g. drop the top border of the first row.
+ * any child) — e.g. drop the top border of the first row. `even` styles every
+ * 2nd repeated item (2nd, 4th, …) — e.g. a staggered gallery.
  */
-export type StyleState = "first" | "last" | "hover" | "active" | "focus";
+export type StyleState = "first" | "last" | "even" | "hover" | "active" | "focus";
 /** Breakpoint max-widths, in px. `base` (Desktop) is unconditional. */
 export declare const BREAKPOINTS: Record<Exclude<Breakpoint, "base">, number>;
 /**
@@ -216,6 +217,7 @@ export interface StyleSet {
     md?: StyleProps;
     first?: StyleProps;
     last?: StyleProps;
+    even?: StyleProps;
     hover?: StyleProps;
     active?: StyleProps;
     focus?: StyleProps;

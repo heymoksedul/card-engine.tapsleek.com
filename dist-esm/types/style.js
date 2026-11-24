@@ -28,8 +28,8 @@ export const BREAKPOINT_MEDIA = {
     sm: `(max-width:${BREAKPOINTS.sm}px)`,
 };
 export const BREAKPOINT_KEYS = ["base", "sm", "md"];
-// first/last are emitted before the interaction states so hover still wins.
-export const STATE_KEYS = ["first", "last", "hover", "active", "focus"];
+// Item states are emitted before the interaction states so hover still wins.
+export const STATE_KEYS = ["first", "last", "even", "hover", "active", "focus"];
 /**
  * The selector for a state layer. Handles comma-separated selector lists.
  * first/last also match the `is-first`/`is-last` classes the renderer puts on
@@ -45,7 +45,9 @@ export function stateSelector(selector, state) {
         ? [`${s}:first-child`, `${s}.is-first`]
         : state === "last"
             ? [`${s}:last-child`, `${s}.is-last`]
-            : [`${s}:${state}`])
+            : state === "even"
+                ? [`${s}.is-even`]
+                : [`${s}:${state}`])
         .join(", ");
 }
 export const EMPTY_STYLE_SET = Object.freeze({ base: {} });

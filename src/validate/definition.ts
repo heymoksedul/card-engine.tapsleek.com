@@ -1153,7 +1153,7 @@ export function sanitizeTemplateDefinition<T = unknown>(input: T): T {
 
   function cleanStyle(style: any): any {
     if (!style || typeof style !== "object") return style;
-    for (const layerKey of ["base", "sm", "md", "first", "last", "hover", "active", "focus"]) {
+    for (const layerKey of ["base", "sm", "md", "first", "last", "even", "hover", "active", "focus"]) {
       const layer = style[layerKey];
       if (!layer || typeof layer !== "object") continue;
 

@@ -979,7 +979,7 @@ function sanitizeTemplateDefinition(input) {
     function cleanStyle(style) {
         if (!style || typeof style !== "object")
             return style;
-        for (const layerKey of ["base", "sm", "md", "first", "last", "hover", "active", "focus"]) {
+        for (const layerKey of ["base", "sm", "md", "first", "last", "even", "hover", "active", "focus"]) {
             const layer = style[layerKey];
             if (!layer || typeof layer !== "object")
                 continue;

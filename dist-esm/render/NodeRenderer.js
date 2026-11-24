@@ -144,6 +144,44 @@ function CarouselProvider({ node, content, ctx, dom }) {
         }
         track.style.transform = `translate3d(-${offset}px, 0, 0)`;
     }, []);
+    // How far a non-loop track can travel: the last slide stops at the right
+    // edge instead of being pulled to the left with empty space after it.
+    // Measured in layout px so a scaled builder/preview canvas doesn't skew it.
+    const getMaxOffset = React.useCallback(() => {
+        const track = trackRef.current;
+        const viewport = viewportRef.current;
+        const first = track?.firstElementChild;
+        const last = track?.lastElementChild;
+        if (!viewport || !first || !last)
+            return 0;
+        const viewportRect = viewport.getBoundingClientRect();
+        const scale = viewport.offsetWidth > 0 ? viewportRect.width / viewport.offsetWidth : 1;
+        if (scale <= 0)
+            return 0;
+        const contentWidth = (last.getBoundingClientRect().right -
+            first.getBoundingClientRect().left) /
+            scale;
+        return Math.max(0, contentWidth - viewportRect.width / scale);
+    }, []);
+    const getMaxIndex = React.useCallback(() => {
+        const maxSlideIndex = Math.max(0, originalSlideCount - 1);
+        const step = getStep();
+        const maxOffset = getMaxOffset();
+        if (step <= 0 || maxOffset <= 0.5)
+            return 0;
+        return Math.min(maxSlideIndex, Math.ceil((maxOffset - 0.5) / step));
+    }, [getMaxOffset, getStep, originalSlideCount]);
+    const offsetFor = React.useCallback((index) => {
+        const offset = index * getStep();
+        return isInfinite ? offset : Math.min(offset, getMaxOffset());
+    }, [getMaxOffset, getStep, isInfinite]);
+    const syncEdgeState = React.useCallback((index) => {
+        const maxIndex = getMaxIndex();
+        // At the end stop the last slide is the one fully in view.
+        setSelectedIndex(maxIndex > 0 && index >= maxIndex ? originalSlideCount - 1 : index);
+        setCanScrollPrev(index > 0);
+        setCanScrollNext(index < maxIndex);
+    }, [getMaxIndex, originalSlideCount]);
     const checkLoopSettle = React.useCallback(() => {
         if (!isInfinite)
             return;
@@ -167,20 +205,28 @@ function CarouselProvider({ node, content, ctx, dom }) {
     }, [applyTransform, getStep, isInfinite, originalSlideCount]);
     // Initial position and resize handling
     React.useEffect(() => {
+        if (!isInfinite)
+            indexRef.current = Math.min(indexRef.current, getMaxIndex());
         const step = getStep();
         if (step > 0) {
-            applyTransform(indexRef.current * step, false);
+            applyTransform(offsetFor(indexRef.current), false);
         }
-        const realIdx = isInfinite
-            ? ((indexRef.current % originalSlideCount) + originalSlideCount) %
-                originalSlideCount
-            : indexRef.current;
-        setSelectedIndex(realIdx);
-        if (!isInfinite) {
-            setCanScrollPrev(indexRef.current > 0);
-            setCanScrollNext(indexRef.current < originalSlideCount - 1);
+        if (isInfinite) {
+            setSelectedIndex(((indexRef.current % originalSlideCount) + originalSlideCount) %
+                originalSlideCount);
         }
-    }, [applyTransform, getStep, isInfinite, originalSlideCount]);
+        else {
+            syncEdgeState(indexRef.current);
+        }
+    }, [
+        applyTransform,
+        getMaxIndex,
+        getStep,
+        isInfinite,
+        offsetFor,
+        originalSlideCount,
+        syncEdgeState,
+    ]);
     React.useEffect(() => {
         const viewport = viewportRef.current;
         if (!viewport || typeof ResizeObserver === "undefined")
@@ -191,14 +237,25 @@ function CarouselProvider({ node, content, ctx, dom }) {
                 initial = false;
                 return;
             }
+            if (!isInfinite) {
+                indexRef.current = Math.min(indexRef.current, getMaxIndex());
+                syncEdgeState(indexRef.current);
+            }
             const step = getStep();
             if (step > 0) {
-                applyTransform(indexRef.current * step, false);
+                applyTransform(offsetFor(indexRef.current), false);
             }
         });
         ro.observe(viewport);
         return () => ro.disconnect();
-    }, [applyTransform, getStep]);
+    }, [
+        applyTransform,
+        getMaxIndex,
+        getStep,
+        isInfinite,
+        offsetFor,
+        syncEdgeState,
+    ]);
     // Transition end listener on track
     React.useEffect(() => {
         const track = trackRef.current;
@@ -239,21 +296,21 @@ function CarouselProvider({ node, content, ctx, dom }) {
             transitionTimerRef.current = setTimeout(checkLoopSettle, 400);
         }
         else {
-            const maxIndex = Math.max(0, N - 1);
-            if (indexRef.current >= maxIndex)
+            if (indexRef.current >= getMaxIndex())
                 return;
             indexRef.current += 1;
-            applyTransform(indexRef.current * step, true, 350);
-            setSelectedIndex(indexRef.current);
-            setCanScrollPrev(indexRef.current > 0);
-            setCanScrollNext(indexRef.current < maxIndex);
+            applyTransform(offsetFor(indexRef.current), true, 350);
+            syncEdgeState(indexRef.current);
         }
     }, [
         applyTransform,
         checkLoopSettle,
+        getMaxIndex,
         getStep,
         isInfinite,
+        offsetFor,
         originalSlideCount,
+        syncEdgeState,
     ]);
     const scrollPrev = React.useCallback(() => {
         resetAutoplayTimerRef.current?.();
@@ -281,17 +338,17 @@ function CarouselProvider({ node, content, ctx, dom }) {
             if (indexRef.current <= 0)
                 return;
             indexRef.current -= 1;
-            applyTransform(indexRef.current * step, true, 350);
-            setSelectedIndex(indexRef.current);
-            setCanScrollPrev(indexRef.current > 0);
-            setCanScrollNext(indexRef.current < Math.max(0, N - 1));
+            applyTransform(offsetFor(indexRef.current), true, 350);
+            syncEdgeState(indexRef.current);
         }
     }, [
         applyTransform,
         checkLoopSettle,
         getStep,
         isInfinite,
+        offsetFor,
         originalSlideCount,
+        syncEdgeState,
     ]);
     const scrollTo = React.useCallback((target) => {
         resetAutoplayTimerRef.current?.();
@@ -304,17 +361,27 @@ function CarouselProvider({ node, content, ctx, dom }) {
         const N = originalSlideCount;
         const targetIdx = isInfinite
             ? N + target
-            : Math.max(0, Math.min(N - 1, target));
+            : Math.max(0, Math.min(getMaxIndex(), target));
         indexRef.current = targetIdx;
-        applyTransform(targetIdx * step, true, 350);
-        setSelectedIndex(target);
-        if (!isInfinite) {
-            setCanScrollPrev(targetIdx > 0);
-            setCanScrollNext(targetIdx < Math.max(0, N - 1));
+        applyTransform(offsetFor(targetIdx), true, 350);
+        if (isInfinite) {
+            setSelectedIndex(target);
+        }
+        else {
+            syncEdgeState(targetIdx);
         }
         clearTimeout(transitionTimerRef.current);
         transitionTimerRef.current = setTimeout(checkLoopSettle, 400);
-    }, [applyTransform, checkLoopSettle, getStep, isInfinite, originalSlideCount]);
+    }, [
+        applyTransform,
+        checkLoopSettle,
+        getMaxIndex,
+        getStep,
+        isInfinite,
+        offsetFor,
+        originalSlideCount,
+        syncEdgeState,
+    ]);
     // Pointer drag implementation
     const isPointerDownRef = React.useRef(false);
     const startXRef = React.useRef(0);
@@ -371,10 +438,8 @@ function CarouselProvider({ node, content, ctx, dom }) {
         }
         if (isDraggingRef.current) {
             let currentOffset = startOffsetRef.current - deltaX;
-            const step = getStep();
-            const N = originalSlideCount;
             if (!isInfinite) {
-                const maxOffset = Math.max(0, N - 1) * step;
+                const maxOffset = getMaxOffset();
                 if (currentOffset < 0) {
                     currentOffset = currentOffset * 0.35;
                 }
@@ -391,7 +456,7 @@ function CarouselProvider({ node, content, ctx, dom }) {
                 lastTimeRef.current = now;
             }
         }
-    }, [applyTransform, getStep, isInfinite, originalSlideCount]);
+    }, [applyTransform, getMaxOffset, isInfinite]);
     const endDrag = React.useCallback((e) => {
         if (!isPointerDownRef.current)
             return;
@@ -433,21 +498,51 @@ function CarouselProvider({ node, content, ctx, dom }) {
             }
             const N = originalSlideCount;
             if (!isInfinite) {
-                targetIndex = Math.max(0, Math.min(Math.max(0, N - 1), targetIndex));
+                // The end stop can sit between two step positions, so pick from the
+                // real stops rather than rounding by step.
+                const maxIndex = getMaxIndex();
+                const stops = Array.from({ length: maxIndex + 1 }, (_, i) => offsetFor(i));
+                if (velocity < -0.2) {
+                    const next = stops.findIndex((s) => s >= currentOffset - 0.5);
+                    targetIndex = next === -1 ? maxIndex : next;
+                }
+                else if (velocity > 0.2) {
+                    let prev = 0;
+                    stops.forEach((s, i) => {
+                        if (s <= currentOffset + 0.5)
+                            prev = i;
+                    });
+                    targetIndex = prev;
+                }
+                else {
+                    targetIndex = stops.reduce((best, s, i) => Math.abs(s - currentOffset) <
+                        Math.abs(stops[best] - currentOffset)
+                        ? i
+                        : best, 0);
+                }
             }
             indexRef.current = targetIndex;
-            applyTransform(targetIndex * step, true, 350);
-            const realIdx = isInfinite ? ((targetIndex % N) + N) % N : targetIndex;
-            setSelectedIndex(realIdx);
-            if (!isInfinite) {
-                setCanScrollPrev(targetIndex > 0);
-                setCanScrollNext(targetIndex < Math.max(0, N - 1));
+            applyTransform(offsetFor(targetIndex), true, 350);
+            if (isInfinite) {
+                setSelectedIndex(((targetIndex % N) + N) % N);
+            }
+            else {
+                syncEdgeState(targetIndex);
             }
             clearTimeout(transitionTimerRef.current);
             transitionTimerRef.current = setTimeout(checkLoopSettle, 400);
             resetAutoplayTimerRef.current?.();
         }
-    }, [applyTransform, checkLoopSettle, getStep, isInfinite, originalSlideCount]);
+    }, [
+        applyTransform,
+        checkLoopSettle,
+        getMaxIndex,
+        getStep,
+        isInfinite,
+        offsetFor,
+        originalSlideCount,
+        syncEdgeState,
+    ]);
     const onPointerUp = React.useCallback((e) => {
         endDrag(e);
     }, [endDrag]);
@@ -747,14 +842,17 @@ function ElementRenderer({ node, content, ctx, }) {
                     // First/last item hooks for the `first`/`last` style states —
                     // they still match when the list shares its parent with other
                     // layers, where :first-child / :last-child would miss.
-                    __edgeClass: isLoopCarousel
-                        ? undefined
-                        : [
-                            index === 0 ? "is-first" : "",
-                            index === items.length - 1 ? "is-last" : "",
-                        ]
-                            .filter(Boolean)
-                            .join(" ") || undefined,
+                    // `is-even` (2nd, 4th, …) also holds on loop clones, so a
+                    // staggered slider keeps its rhythm.
+                    __edgeClass: [
+                        !isLoopCarousel && index === 0 ? "is-first" : "",
+                        !isLoopCarousel && index === items.length - 1
+                            ? "is-last"
+                            : "",
+                        index % 2 === 1 ? "is-even" : "",
+                    ]
+                        .filter(Boolean)
+                        .join(" ") || undefined,
                     ...(node.repeat?.source === "self" &&
                         node.repeat.path === "links" &&
                         typeof item?.id === "string"

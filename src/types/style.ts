@@ -28,9 +28,10 @@ export type StyleValue = string | number;
 export type Breakpoint = "base" | "sm" | "md";
 /**
  * `first` / `last` style the first / last item of a list (a repeated item or
- * any child) — e.g. drop the top border of the first row.
+ * any child) — e.g. drop the top border of the first row. `even` styles every
+ * 2nd repeated item (2nd, 4th, …) — e.g. a staggered gallery.
  */
-export type StyleState = "first" | "last" | "hover" | "active" | "focus";
+export type StyleState = "first" | "last" | "even" | "hover" | "active" | "focus";
 
 /** Breakpoint max-widths, in px. `base` (Desktop) is unconditional. */
 export const BREAKPOINTS: Record<Exclude<Breakpoint, "base">, number> = {
@@ -52,8 +53,8 @@ export const BREAKPOINT_MEDIA: Record<Exclude<Breakpoint, "base">, string> = {
 };
 
 export const BREAKPOINT_KEYS: Breakpoint[] = ["base", "sm", "md"];
-// first/last are emitted before the interaction states so hover still wins.
-export const STATE_KEYS: StyleState[] = ["first", "last", "hover", "active", "focus"];
+// Item states are emitted before the interaction states so hover still wins.
+export const STATE_KEYS: StyleState[] = ["first", "last", "even", "hover", "active", "focus"];
 
 /**
  * The selector for a state layer. Handles comma-separated selector lists.
@@ -71,7 +72,9 @@ export function stateSelector(selector: string, state: StyleState): string {
         ? [`${s}:first-child`, `${s}.is-first`]
         : state === "last"
           ? [`${s}:last-child`, `${s}.is-last`]
-          : [`${s}:${state}`],
+          : state === "even"
+            ? [`${s}.is-even`]
+            : [`${s}:${state}`],
     )
     .join(", ");
 }
@@ -276,6 +279,7 @@ export interface StyleSet {
   md?: StyleProps;
   first?: StyleProps;
   last?: StyleProps;
+  even?: StyleProps;
   hover?: StyleProps;
   active?: StyleProps;
   focus?: StyleProps;
