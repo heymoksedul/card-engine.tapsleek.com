@@ -223,6 +223,13 @@ function CarouselProvider({ node, content, ctx, dom }: any) {
         track.style.transition = "none";
       }
       track.style.transform = `translate3d(-${offset}px, 0, 0)`;
+      // The `even` style follows the slide's place in view, not its number:
+      // the 2nd, 4th… visible slide is the "even" one, so a staggered
+      // slider keeps the same up/down rhythm however far it has moved.
+      const first = indexRef.current;
+      Array.from(track.children).forEach((slide, i) => {
+        slide.classList.toggle("is-even", (((i - first) % 2) + 2) % 2 === 1);
+      });
     },
     [],
   );
@@ -1293,6 +1300,9 @@ function ElementRenderer({
               box-sizing: border-box !important;
               user-select: none !important;
               -webkit-user-select: none !important;
+            }
+            .${trackId}-track > * {
+              transition: margin 350ms cubic-bezier(0.25, 1, 0.5, 1);
             }
             .${trackId}-track img {
               -webkit-user-drag: none !important;
