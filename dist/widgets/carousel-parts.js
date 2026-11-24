@@ -176,6 +176,12 @@ function getCarouselDesignSchema(dotsKey = "showDots") {
             visibleIf: { key: "useCarousel", equals: true },
         },
         {
+            key: "carouselSlotMode",
+            type: "boolean",
+            label: "Fixed Frames",
+            visibleIf: { key: "useCarousel", equals: true },
+        },
+        {
             key: "carouselAutoplay",
             type: "boolean",
             label: "Autoplay",

@@ -140,7 +140,21 @@ function CarouselProvider({ node, content, ctx, dom }: any) {
     content?._design?.carouselPageSlide ??
     ctx.selfData?._design?.carouselPageSlide ??
     ctx.selfData?.carouselPageSlide;
-  const pageSize = pageCandidate ? Math.max(1, Math.floor(perView)) : 1;
+  // "Fixed frames": the first whole slides in view stay put as frames (so a
+  // staggered gallery keeps its high/low rhythm) and the pictures slide
+  // right-to-left inside them, one at a time. No loop in this mode.
+  const slotCandidate =
+    node.props?.carouselSlotMode ??
+    trackChild?.props?.carouselSlotMode ??
+    content?._design?.carouselSlotMode ??
+    ctx.selfData?._design?.carouselSlotMode ??
+    ctx.selfData?.carouselSlotMode;
+  const slotMode = Boolean(slotCandidate);
+  const slotFrames = Math.max(1, Math.floor(perView));
+  const slotModeRef = React.useRef(slotMode);
+  slotModeRef.current = slotMode;
+  const pageSize =
+    pageCandidate && !slotMode ? Math.max(1, Math.floor(perView)) : 1;
 
   const autoplayCandidate =
     node.props?.carouselAutoplay ??
@@ -196,7 +210,7 @@ function CarouselProvider({ node, content, ctx, dom }: any) {
     else if (trackChild?.children?.length) rawItems = trackChild.children;
   }
   const originalSlideCount = rawItems.length || 1;
-  const isInfinite = loop && originalSlideCount >= 2;
+  const isInfinite = loop && !slotMode && originalSlideCount >= 2;
 
   const initialIndex = isInfinite ? originalSlideCount : 0;
   const indexRef = React.useRef(initialIndex);
@@ -228,8 +242,28 @@ function CarouselProvider({ node, content, ctx, dom }: any) {
     (offset: number, withTransition = false, duration = 350) => {
       const track = trackRef.current;
       if (!track) return;
+      const easing = "cubic-bezier(0.25, 1, 0.5, 1)";
+      if (slotModeRef.current) {
+        // Frames stay put; each frame's strip slides its pictures.
+        track.style.transition = "none";
+        track.style.transform = "none";
+        const first = track.firstElementChild as HTMLElement | null;
+        const step = first ? first.offsetWidth + 12 : 0;
+        if (!step) return;
+        const pos = offset / step;
+        track
+          .querySelectorAll<HTMLElement>("[data-ts-slot-strip]")
+          .forEach((strip) => {
+            const j = Number(strip.dataset.tsSlotStrip) || 0;
+            strip.style.transition = withTransition
+              ? `transform ${duration}ms ${easing}`
+              : "none";
+            strip.style.transform = `translate3d(${-(pos + j) * 100}%, 0, 0)`;
+          });
+        return;
+      }
       if (withTransition) {
-        track.style.transition = `transform ${duration}ms cubic-bezier(0.25, 1, 0.5, 1)`;
+        track.style.transition = `transform ${duration}ms ${easing}`;
       } else {
         track.style.transition = "none";
       }
@@ -242,6 +276,8 @@ function CarouselProvider({ node, content, ctx, dom }: any) {
   // edge instead of being pulled to the left with empty space after it.
   // Measured in layout px so a scaled builder/preview canvas doesn't skew it.
   const getMaxOffset = React.useCallback(() => {
+    if (slotMode)
+      return Math.max(0, originalSlideCount - slotFrames) * getStep();
     const track = trackRef.current;
     const viewport = viewportRef.current;
     const first = track?.firstElementChild;
@@ -256,7 +292,7 @@ function CarouselProvider({ node, content, ctx, dom }: any) {
         first.getBoundingClientRect().left) /
       scale;
     return Math.max(0, contentWidth - viewportRect.width / scale);
-  }, []);
+  }, [getStep, originalSlideCount, slotFrames, slotMode]);
 
   const getMaxIndex = React.useCallback(() => {
     const maxSlideIndex = Math.max(0, originalSlideCount - 1);
@@ -305,6 +341,53 @@ function CarouselProvider({ node, content, ctx, dom }: any) {
       void track.offsetHeight;
     }
   }, [applyTransform, getStep, isInfinite, originalSlideCount]);
+
+  const slotKey = slotMode
+    ? rawItems
+        .map((it: any) => it?.url ?? it?.image ?? it?.id ?? "")
+        .join("|")
+    : "";
+  React.useEffect(() => {
+    const track = trackRef.current;
+    if (!slotMode || !track) return;
+    const slides = Array.from(track.children) as HTMLElement[];
+    if (slides.length < 2) return;
+    const frames = slides.slice(0, Math.min(slotFrames, slides.length));
+    slides.slice(frames.length).forEach((el) => {
+      el.style.display = "none";
+    });
+    const strips: HTMLElement[] = [];
+    frames.forEach((frame, j) => {
+      if (getComputedStyle(frame).position === "static")
+        frame.style.position = "relative";
+      const strip = document.createElement("div");
+      strip.dataset.tsSlotStrip = String(j);
+      strip.style.cssText =
+        "position:absolute;inset:0;display:flex;will-change:transform;";
+      slides.forEach((src) => {
+        const cell = document.createElement("div");
+        cell.style.cssText =
+          "flex:0 0 100%;width:100%;height:100%;overflow:hidden;cursor:pointer;";
+        cell.innerHTML = src.innerHTML;
+        // Clicks (lightbox) go to the real slide React rendered.
+        cell.addEventListener("click", () => {
+          const target = (src.querySelector("img") as HTMLElement) || src;
+          target.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        });
+        strip.appendChild(cell);
+      });
+      frame.appendChild(strip);
+      strips.push(strip);
+    });
+    applyTransform(offsetFor(indexRef.current), false);
+    return () => {
+      strips.forEach((strip) => strip.remove());
+      slides.forEach((el) => {
+        el.style.display = "";
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slotMode, slotKey, slotFrames, originalSlideCount]);
 
   // Initial position and resize handling
   React.useEffect(() => {
