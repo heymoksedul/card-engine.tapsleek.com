@@ -31,6 +31,51 @@ export function NodeRenderer({ node, content, ctx }) {
         return _jsx(SlotRenderer, { node: node, content: content, ctx: ctx });
     return null;
 }
+/**
+ * "Show first N, then View all": a widget whose design sets `collapseAfter`
+ * renders only the first N items of its list until the toggle button
+ * (`action: "list-toggle"`) opens the rest. Off when collapseAfter is 0.
+ */
+export const ListExpandContext = React.createContext(null);
+/** First self-bound repeat path in a layout, outside any carousel. */
+function findListRepeatPath(node) {
+    if (!node || typeof node !== "object")
+        return undefined;
+    if (node.tag === "carousel" || node.tag === "carousel-root")
+        return undefined;
+    if (node.repeat?.source === "self" && typeof node.repeat.path === "string")
+        return node.repeat.path;
+    for (const child of node.children ?? []) {
+        const found = findListRepeatPath(child);
+        if (found)
+            return found;
+    }
+    return node.layout ? findListRepeatPath(node.layout) : undefined;
+}
+function ListExpand({ design, selfData, layout, children, }) {
+    const [expanded, setExpanded] = React.useState(false);
+    const limit = Math.max(0, Math.floor(Number(design?.collapseAfter) || 0));
+    const path = limit ? findListRepeatPath(layout) : undefined;
+    const value = React.useMemo(() => {
+        if (!limit || !path)
+            return null;
+        const items = selfData?.[path];
+        const total = Array.isArray(items) ? items.length : 0;
+        const str = (v, d) => typeof v === "string" && v.trim() ? v : d;
+        return {
+            limit,
+            expanded,
+            toggle: () => setExpanded((e) => !e),
+            total,
+            path,
+            expandLabel: str(design?.expandLabel, "View all {count}"),
+            collapseLabel: str(design?.collapseLabel, "Show less"),
+        };
+    }, [limit, path, expanded, selfData, design?.expandLabel, design?.collapseLabel]);
+    if (!value)
+        return _jsx(_Fragment, { children: children });
+    return (_jsx(ListExpandContext.Provider, { value: value, children: children }));
+}
 export const CarouselContext = React.createContext(null);
 function CarouselProvider({ node, content, ctx, dom }) {
     const viewportRef = React.useRef(null);
@@ -899,6 +944,7 @@ function looksLikeUrl(value) {
 }
 function ElementRenderer({ node, content, ctx, }) {
     const ctxCarousel = React.useContext(CarouselContext);
+    const listExpand = React.useContext(ListExpandContext);
     if (node.visibleIf) {
         const { key, equals } = node.visibleIf;
         let val = content?._design?.[key] ?? ctx.selfData?.[key];
@@ -916,9 +962,18 @@ function ElementRenderer({ node, content, ctx, }) {
         return null;
     }
     if (node.repeat) {
-        const items = resolveBinding(node.repeat, ctx.card, content, ctx.selfData);
-        if (!Array.isArray(items))
+        const resolvedItems = resolveBinding(node.repeat, ctx.card, content, ctx.selfData);
+        if (!Array.isArray(resolvedItems))
             return null;
+        let items = resolvedItems;
+        if (listExpand &&
+            !listExpand.expanded &&
+            !ctxCarousel &&
+            node.repeat.source === "self" &&
+            node.repeat.path === listExpand.path &&
+            items.length > listExpand.limit) {
+            items = items.slice(0, listExpand.limit);
+        }
         const isLoopCarousel = ctx.isCarouselSlide && Boolean(ctxCarousel?.loop) && items.length >= 2;
         const renderItems = isLoopCarousel
             ? [
@@ -1268,6 +1323,21 @@ function ElementRenderer({ node, content, ctx, }) {
                 break;
             const action = props.action || "link";
             dom["data-action"] = action;
+            if (action === "list-toggle") {
+                // Nothing to open: no toggle.
+                if (!listExpand || listExpand.total <= listExpand.limit)
+                    return null;
+                dom["data-expanded"] = listExpand.expanded ? "true" : "false";
+                dom["aria-expanded"] = listExpand.expanded;
+                dom.role = "button";
+                dom.onClick = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    listExpand.toggle();
+                };
+                children = (listExpand.expanded ? listExpand.collapseLabel : listExpand.expandLabel).replace(/\{count\}/g, String(listExpand.total));
+                break;
+            }
             if (action === "carousel-prev" &&
                 ctxCarousel &&
                 !ctxCarousel.canScrollPrev) {
@@ -1776,14 +1846,15 @@ function WidgetRenderer({ node, content, ctx, }) {
                 },
             },
         };
-        const renderedLayout = (_jsx(NodeRenderer, { node: mergedLayout, content: {
-                // Keep the card-level content visible inside the layout so a widget
-                // nested here (e.g. Connect Buttons in Profile) still finds its own
-                // content by key.
-                ...(content ?? {}),
-                [node.key]: widgetContent,
-                _design: { ...(node.design || {}), ...(widgetContent || {}) },
-            }, ctx: { ...widgetCtx, selfData: widgetContent, widgetLayout: layout } }));
+        const widgetDesign = { ...(node.design || {}), ...(widgetContent || {}) };
+        const renderedLayout = (_jsx(ListExpand, { design: widgetDesign, selfData: widgetContent, layout: layout, children: _jsx(NodeRenderer, { node: mergedLayout, content: {
+                    // Keep the card-level content visible inside the layout so a widget
+                    // nested here (e.g. Connect Buttons in Profile) still finds its own
+                    // content by key.
+                    ...(content ?? {}),
+                    [node.key]: widgetContent,
+                    _design: { ...(node.design || {}), ...(widgetContent || {}) },
+                }, ctx: { ...widgetCtx, selfData: widgetContent, widgetLayout: layout } }) }));
         // "Inject before" placeholders are handled by the parent element's child
         // loop; doing it here too rendered every user block twice.
         return renderedLayout;

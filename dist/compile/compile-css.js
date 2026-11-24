@@ -557,6 +557,10 @@ function resetCss(scope, pretty) {
         `.${scope} p,.${scope} h1,.${scope} h2,.${scope} h3,.${scope} h4,.${scope} figure,.${scope} blockquote{margin:0}`,
         `.${scope} ul,.${scope} ol{margin:0;padding:0;list-style:none}`,
         `.${scope} svg{stroke-width:inherit}`,
+        // "View all / Show less" toggle: its arrow icon flips when the list is open.
+        `.${scope} [data-action="list-toggle"]{cursor:pointer}`,
+        `.${scope} [data-action="list-toggle"] svg{transition:transform 250ms ease}`,
+        `.${scope} [data-action="list-toggle"][data-expanded="true"] svg{transform:rotate(180deg)}`,
         // Gradient colour on icons: a node with a gradient colour sets --ts-paint
         // (url(#gradient) + solid fallback); everything else keeps currentColor.
         `.${scope} svg[stroke="currentColor"],.${scope} svg [stroke="currentColor"]{stroke:var(--ts-paint, currentColor)}`,

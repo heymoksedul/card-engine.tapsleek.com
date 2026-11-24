@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CarouselContext = void 0;
+exports.CarouselContext = exports.ListExpandContext = void 0;
 exports.NodeRenderer = NodeRenderer;
 exports.videoThumbnailUrl = videoThumbnailUrl;
 exports.structuralFrom = structuralFrom;
@@ -40,6 +40,51 @@ function NodeRenderer({ node, content, ctx }) {
     if (node.kind === "slot")
         return (0, jsx_runtime_1.jsx)(SlotRenderer, { node: node, content: content, ctx: ctx });
     return null;
+}
+/**
+ * "Show first N, then View all": a widget whose design sets `collapseAfter`
+ * renders only the first N items of its list until the toggle button
+ * (`action: "list-toggle"`) opens the rest. Off when collapseAfter is 0.
+ */
+exports.ListExpandContext = react_1.default.createContext(null);
+/** First self-bound repeat path in a layout, outside any carousel. */
+function findListRepeatPath(node) {
+    if (!node || typeof node !== "object")
+        return undefined;
+    if (node.tag === "carousel" || node.tag === "carousel-root")
+        return undefined;
+    if (node.repeat?.source === "self" && typeof node.repeat.path === "string")
+        return node.repeat.path;
+    for (const child of node.children ?? []) {
+        const found = findListRepeatPath(child);
+        if (found)
+            return found;
+    }
+    return node.layout ? findListRepeatPath(node.layout) : undefined;
+}
+function ListExpand({ design, selfData, layout, children, }) {
+    const [expanded, setExpanded] = react_1.default.useState(false);
+    const limit = Math.max(0, Math.floor(Number(design?.collapseAfter) || 0));
+    const path = limit ? findListRepeatPath(layout) : undefined;
+    const value = react_1.default.useMemo(() => {
+        if (!limit || !path)
+            return null;
+        const items = selfData?.[path];
+        const total = Array.isArray(items) ? items.length : 0;
+        const str = (v, d) => typeof v === "string" && v.trim() ? v : d;
+        return {
+            limit,
+            expanded,
+            toggle: () => setExpanded((e) => !e),
+            total,
+            path,
+            expandLabel: str(design?.expandLabel, "View all {count}"),
+            collapseLabel: str(design?.collapseLabel, "Show less"),
+        };
+    }, [limit, path, expanded, selfData, design?.expandLabel, design?.collapseLabel]);
+    if (!value)
+        return (0, jsx_runtime_1.jsx)(jsx_runtime_1.Fragment, { children: children });
+    return ((0, jsx_runtime_1.jsx)(exports.ListExpandContext.Provider, { value: value, children: children }));
 }
 exports.CarouselContext = react_1.default.createContext(null);
 function CarouselProvider({ node, content, ctx, dom }) {
@@ -909,6 +954,7 @@ function looksLikeUrl(value) {
 }
 function ElementRenderer({ node, content, ctx, }) {
     const ctxCarousel = react_1.default.useContext(exports.CarouselContext);
+    const listExpand = react_1.default.useContext(exports.ListExpandContext);
     if (node.visibleIf) {
         const { key, equals } = node.visibleIf;
         let val = content?._design?.[key] ?? ctx.selfData?.[key];
@@ -926,9 +972,18 @@ function ElementRenderer({ node, content, ctx, }) {
         return null;
     }
     if (node.repeat) {
-        const items = (0, resolveBinding_1.resolveBinding)(node.repeat, ctx.card, content, ctx.selfData);
-        if (!Array.isArray(items))
+        const resolvedItems = (0, resolveBinding_1.resolveBinding)(node.repeat, ctx.card, content, ctx.selfData);
+        if (!Array.isArray(resolvedItems))
             return null;
+        let items = resolvedItems;
+        if (listExpand &&
+            !listExpand.expanded &&
+            !ctxCarousel &&
+            node.repeat.source === "self" &&
+            node.repeat.path === listExpand.path &&
+            items.length > listExpand.limit) {
+            items = items.slice(0, listExpand.limit);
+        }
         const isLoopCarousel = ctx.isCarouselSlide && Boolean(ctxCarousel?.loop) && items.length >= 2;
         const renderItems = isLoopCarousel
             ? [
@@ -1278,6 +1333,21 @@ function ElementRenderer({ node, content, ctx, }) {
                 break;
             const action = props.action || "link";
             dom["data-action"] = action;
+            if (action === "list-toggle") {
+                // Nothing to open: no toggle.
+                if (!listExpand || listExpand.total <= listExpand.limit)
+                    return null;
+                dom["data-expanded"] = listExpand.expanded ? "true" : "false";
+                dom["aria-expanded"] = listExpand.expanded;
+                dom.role = "button";
+                dom.onClick = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    listExpand.toggle();
+                };
+                children = (listExpand.expanded ? listExpand.collapseLabel : listExpand.expandLabel).replace(/\{count\}/g, String(listExpand.total));
+                break;
+            }
             if (action === "carousel-prev" &&
                 ctxCarousel &&
                 !ctxCarousel.canScrollPrev) {
@@ -1786,14 +1856,15 @@ function WidgetRenderer({ node, content, ctx, }) {
                 },
             },
         };
-        const renderedLayout = ((0, jsx_runtime_1.jsx)(NodeRenderer, { node: mergedLayout, content: {
-                // Keep the card-level content visible inside the layout so a widget
-                // nested here (e.g. Connect Buttons in Profile) still finds its own
-                // content by key.
-                ...(content ?? {}),
-                [node.key]: widgetContent,
-                _design: { ...(node.design || {}), ...(widgetContent || {}) },
-            }, ctx: { ...widgetCtx, selfData: widgetContent, widgetLayout: layout } }));
+        const widgetDesign = { ...(node.design || {}), ...(widgetContent || {}) };
+        const renderedLayout = ((0, jsx_runtime_1.jsx)(ListExpand, { design: widgetDesign, selfData: widgetContent, layout: layout, children: (0, jsx_runtime_1.jsx)(NodeRenderer, { node: mergedLayout, content: {
+                    // Keep the card-level content visible inside the layout so a widget
+                    // nested here (e.g. Connect Buttons in Profile) still finds its own
+                    // content by key.
+                    ...(content ?? {}),
+                    [node.key]: widgetContent,
+                    _design: { ...(node.design || {}), ...(widgetContent || {}) },
+                }, ctx: { ...widgetCtx, selfData: widgetContent, widgetLayout: layout } }) }));
         // "Inject before" placeholders are handled by the parent element's child
         // loop; doing it here too rendered every user block twice.
         return renderedLayout;

@@ -53,6 +53,16 @@ export const meta: WidgetModule['meta'] = {
     },
     { key: 'showDesc', type: 'boolean', label: 'Show descriptions' },
     { key: 'showPrice', type: 'boolean', label: 'Show price' },
+    {
+      key: 'collapseAfter', type: 'number', label: 'Show first',
+      min: 0, max: 12, step: 1,
+      hint: 'List mode: show this many items, then a "View all" button (0 = show all). Needs a toggle button (action list-toggle) in the layout.',
+    },
+    {
+      key: 'expandLabel', type: 'text', label: '"View all" text', max: 40,
+      placeholder: 'View all {count}', hint: '{count} = number of items',
+    },
+    { key: 'collapseLabel', type: 'text', label: '"Show less" text', max: 40, placeholder: 'Show less' },
     ...getCarouselDesignSchema(),
   ],
   contentSchema: [

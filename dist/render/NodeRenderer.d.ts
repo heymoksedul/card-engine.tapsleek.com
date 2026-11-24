@@ -39,6 +39,20 @@ export interface NodeRendererProps {
     ctx: RenderCtx;
 }
 export declare function NodeRenderer({ node, content, ctx }: NodeRendererProps): React.JSX.Element | null;
+/**
+ * "Show first N, then View all": a widget whose design sets `collapseAfter`
+ * renders only the first N items of its list until the toggle button
+ * (`action: "list-toggle"`) opens the rest. Off when collapseAfter is 0.
+ */
+export declare const ListExpandContext: React.Context<{
+    limit: number;
+    expanded: boolean;
+    toggle: () => void;
+    total: number;
+    path?: string;
+    expandLabel: string;
+    collapseLabel: string;
+} | null>;
 export declare const CarouselContext: React.Context<{
     viewportRef?: React.RefObject<HTMLDivElement | null>;
     trackRef?: React.RefObject<HTMLDivElement | null>;

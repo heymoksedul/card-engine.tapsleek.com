@@ -77,6 +77,70 @@ export function NodeRenderer({ node, content, ctx }: NodeRendererProps) {
   return null;
 }
 
+/**
+ * "Show first N, then View all": a widget whose design sets `collapseAfter`
+ * renders only the first N items of its list until the toggle button
+ * (`action: "list-toggle"`) opens the rest. Off when collapseAfter is 0.
+ */
+export const ListExpandContext = React.createContext<{
+  limit: number;
+  expanded: boolean;
+  toggle: () => void;
+  total: number;
+  path?: string;
+  expandLabel: string;
+  collapseLabel: string;
+} | null>(null);
+
+/** First self-bound repeat path in a layout, outside any carousel. */
+function findListRepeatPath(node: any): string | undefined {
+  if (!node || typeof node !== "object") return undefined;
+  if (node.tag === "carousel" || node.tag === "carousel-root") return undefined;
+  if (node.repeat?.source === "self" && typeof node.repeat.path === "string")
+    return node.repeat.path;
+  for (const child of node.children ?? []) {
+    const found = findListRepeatPath(child);
+    if (found) return found;
+  }
+  return node.layout ? findListRepeatPath(node.layout) : undefined;
+}
+
+function ListExpand({
+  design,
+  selfData,
+  layout,
+  children,
+}: {
+  design: any;
+  selfData: any;
+  layout: any;
+  children: React.ReactNode;
+}) {
+  const [expanded, setExpanded] = React.useState(false);
+  const limit = Math.max(0, Math.floor(Number(design?.collapseAfter) || 0));
+  const path = limit ? findListRepeatPath(layout) : undefined;
+  const value = React.useMemo(() => {
+    if (!limit || !path) return null;
+    const items = selfData?.[path];
+    const total = Array.isArray(items) ? items.length : 0;
+    const str = (v: unknown, d: string) =>
+      typeof v === "string" && v.trim() ? v : d;
+    return {
+      limit,
+      expanded,
+      toggle: () => setExpanded((e) => !e),
+      total,
+      path,
+      expandLabel: str(design?.expandLabel, "View all {count}"),
+      collapseLabel: str(design?.collapseLabel, "Show less"),
+    };
+  }, [limit, path, expanded, selfData, design?.expandLabel, design?.collapseLabel]);
+  if (!value) return <>{children}</>;
+  return (
+    <ListExpandContext.Provider value={value}>{children}</ListExpandContext.Provider>
+  );
+}
+
 export const CarouselContext = React.createContext<{
   viewportRef?: React.RefObject<HTMLDivElement | null>;
   trackRef?: React.RefObject<HTMLDivElement | null>;
@@ -1085,6 +1149,7 @@ function ElementRenderer({
   ctx: RenderCtx;
 }) {
   const ctxCarousel = React.useContext(CarouselContext);
+  const listExpand = React.useContext(ListExpandContext);
   if (node.visibleIf) {
     const { key, equals } = node.visibleIf;
     let val = content?._design?.[key] ?? ctx.selfData?.[key];
@@ -1115,8 +1180,19 @@ function ElementRenderer({
   }
 
   if (node.repeat) {
-    const items = resolveBinding(node.repeat, ctx.card, content, ctx.selfData);
-    if (!Array.isArray(items)) return null;
+    const resolvedItems = resolveBinding(node.repeat, ctx.card, content, ctx.selfData);
+    if (!Array.isArray(resolvedItems)) return null;
+    let items: any[] = resolvedItems;
+    if (
+      listExpand &&
+      !listExpand.expanded &&
+      !ctxCarousel &&
+      node.repeat.source === "self" &&
+      node.repeat.path === listExpand.path &&
+      items.length > listExpand.limit
+    ) {
+      items = items.slice(0, listExpand.limit);
+    }
 
     const isLoopCarousel =
       ctx.isCarouselSlide && Boolean(ctxCarousel?.loop) && items.length >= 2;
@@ -1575,6 +1651,23 @@ function ElementRenderer({
       if (node.tag === "frame" && props.as !== "a") break;
       const action = (props.action as string) || "link";
       dom["data-action"] = action;
+
+      if (action === "list-toggle") {
+        // Nothing to open: no toggle.
+        if (!listExpand || listExpand.total <= listExpand.limit) return null;
+        dom["data-expanded"] = listExpand.expanded ? "true" : "false";
+        dom["aria-expanded"] = listExpand.expanded;
+        dom.role = "button";
+        dom.onClick = (e: React.MouseEvent) => {
+          e.preventDefault();
+          e.stopPropagation();
+          listExpand.toggle();
+        };
+        children = (
+          listExpand.expanded ? listExpand.collapseLabel : listExpand.expandLabel
+        ).replace(/\{count\}/g, String(listExpand.total));
+        break;
+      }
 
       if (
         action === "carousel-prev" &&
@@ -2243,7 +2336,9 @@ function WidgetRenderer({
       },
     };
 
+    const widgetDesign = { ...(node.design || {}), ...(widgetContent || {}) };
     const renderedLayout = (
+      <ListExpand design={widgetDesign} selfData={widgetContent} layout={layout}>
       <NodeRenderer
         node={mergedLayout}
         content={{
@@ -2256,6 +2351,7 @@ function WidgetRenderer({
         }}
         ctx={{ ...widgetCtx, selfData: widgetContent, widgetLayout: layout }}
       />
+      </ListExpand>
     );
 
     // "Inject before" placeholders are handled by the parent element's child
