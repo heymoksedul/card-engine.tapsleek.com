@@ -966,6 +966,26 @@ function neutralMuted(textHex: string): string {
  * `compileTokenOverrides`. `fontWeight` and `layout` are applied at render (a
  * root class), not here.
  */
+/**
+ * The font families a card owner picked in their Theme (primary = headings,
+ * secondary = body), as bare names ready for a Google Fonts URL. Skips the
+ * "Default"/"Inter" placeholders and anything that isn't a plain font name.
+ */
+export function cardThemeFonts(theme: any | null | undefined): string[] {
+  const out: string[] = [];
+  for (const raw of [
+    theme?.typography?.fontFamily || theme?.fontFamily,
+    theme?.typography?.secondaryFont,
+  ]) {
+    if (typeof raw !== "string") continue;
+    const name = raw.split(",")[0].replace(/['"]/g, "").trim();
+    if (!name || name === "Default" || name === "Inter") continue;
+    if (!/^[A-Za-z0-9 _-]+$/.test(name) || out.includes(name)) continue;
+    out.push(name);
+  }
+  return out;
+}
+
 export function compileCardTheme(
   theme: any | null | undefined,
   cardScopeClass: string,
@@ -989,20 +1009,18 @@ export function compileCardTheme(
     if (v !== null) decls.push(`${TOKEN_PREFIX.color}primary:${v}`);
   }
 
-  const fontFamily = theme.typography?.fontFamily || theme.fontFamily;
-  if (fontFamily) {
-    // If it's just a word like "Oswald", make it a valid font family string like "'Oswald', sans-serif"
-    // Wait, the renderer uses `--f-body: 'Oswald', sans-serif`. validateTokenLiteral might reject just "Oswald"
-    // wait, `validateTokenLiteral("font", "Oswald")` checks VALUE_RE.fontFamily.
-    // If it's valid, we push it. But it needs the fallback for safety.
-    const safeValue = fontFamily.includes(",") ? fontFamily : `'${fontFamily}', sans-serif`;
-    const v = validateTokenLiteral("font", safeValue);
-    if (v !== null)
-      decls.push(
-        `${TOKEN_PREFIX.font}heading:${v}`,
-        `${TOKEN_PREFIX.font}body:${v}`,
-      );
-  }
+  // Primary font → headings; secondary font → body text. Without a secondary
+  // font the primary one sets both (the original single-font behaviour).
+  const fontValue = (raw: unknown): string | null => {
+    if (typeof raw !== "string" || !raw.trim()) return null;
+    const safe = raw.includes(",") ? raw : `'${raw.trim()}', sans-serif`;
+    return validateTokenLiteral("font", safe);
+  };
+  const primaryFont = fontValue(theme.typography?.fontFamily || theme.fontFamily);
+  const secondaryFont = fontValue(theme.typography?.secondaryFont);
+  if (primaryFont) decls.push(`${TOKEN_PREFIX.font}heading:${primaryFont}`);
+  const bodyFont = secondaryFont ?? primaryFont;
+  if (bodyFont) decls.push(`${TOKEN_PREFIX.font}body:${bodyFont}`);
 
   if (theme.radius != null) {
     const v = validateTokenLiteral("radius", `${theme.radius}px`);

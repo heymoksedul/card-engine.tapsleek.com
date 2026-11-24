@@ -23,6 +23,7 @@ import {
 } from "./compile/artifact";
 import {
   compileCardTheme,
+  cardThemeFonts,
   compileCss,
   compileTokenOverrides,
 } from "./compile/compile-css";
@@ -1133,6 +1134,19 @@ describe("compileCardTheme", () => {
       "ts-card-abc",
     );
     expect(css).not.toContain("display:none");
+  });
+
+  it("uses the primary font for headings and the secondary for body", () => {
+    const css = compileCardTheme(
+      { typography: { fontFamily: "Playfair Display", secondaryFont: "Inter" } },
+      "ts-card-abc",
+    );
+    expect(css).toContain("--f-heading:'Playfair Display', sans-serif");
+    expect(css).toContain("--f-body:'Inter', sans-serif");
+    const single = compileCardTheme({ typography: { fontFamily: "Poppins" } }, "ts-card-abc");
+    expect(single).toContain("--f-body:'Poppins', sans-serif");
+    expect(cardThemeFonts({ typography: { fontFamily: "Poppins", secondaryFont: "Lora" } })).toEqual(["Poppins", "Lora"]);
+    expect(cardThemeFonts({ typography: { fontFamily: "Default", secondaryFont: "x;y" } })).toEqual([]);
   });
 
   it("returns empty string for an empty theme", () => {

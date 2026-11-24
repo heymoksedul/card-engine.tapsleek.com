@@ -79,6 +79,12 @@ export declare function compileTokenOverrides(overrides: Partial<Record<TokenGro
  * `compileTokenOverrides`. `fontWeight` and `layout` are applied at render (a
  * root class), not here.
  */
+/**
+ * The font families a card owner picked in their Theme (primary = headings,
+ * secondary = body), as bare names ready for a Google Fonts URL. Skips the
+ * "Default"/"Inter" placeholders and anything that isn't a plain font name.
+ */
+export declare function cardThemeFonts(theme: any | null | undefined): string[];
 export declare function compileCardTheme(theme: any | null | undefined, cardScopeClass: string): string;
 /** Nodes referenced by the tree, for lint + dead-CSS detection. */
 export declare function collectNodeIds(def: TemplateDefinition): string[];
