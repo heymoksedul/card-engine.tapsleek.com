@@ -165,6 +165,12 @@ export function getCarouselDesignSchema(dotsKey = "showDots") {
             visibleIf: { key: "useCarousel", equals: true },
         },
         {
+            key: "carouselPageSlide",
+            type: "boolean",
+            label: "Slide a Full Page",
+            visibleIf: { key: "useCarousel", equals: true },
+        },
+        {
             key: "carouselAutoplay",
             type: "boolean",
             label: "Autoplay",

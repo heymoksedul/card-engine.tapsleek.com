@@ -59,6 +59,15 @@ function CarouselProvider({ node, content, ctx, dom }) {
         ctx.selfData?._design?.carouselLoop ??
         ctx.selfData?.carouselLoop;
     const loop = loopCandidate !== undefined ? Boolean(loopCandidate) : true;
+    // "Slide a full page": arrows/drag move by the number of whole slides in
+    // view, so every slide keeps its place in the visible set (a staggered
+    // gallery stays staggered instead of hopping up and down).
+    const pageCandidate = node.props?.carouselPageSlide ??
+        trackChild?.props?.carouselPageSlide ??
+        content?._design?.carouselPageSlide ??
+        ctx.selfData?._design?.carouselPageSlide ??
+        ctx.selfData?.carouselPageSlide;
+    const pageSize = pageCandidate ? Math.max(1, Math.floor(perView)) : 1;
     const autoplayCandidate = node.props?.carouselAutoplay ??
         trackChild?.props?.carouselAutoplay ??
         content?._design?.carouselAutoplay ??
@@ -143,13 +152,6 @@ function CarouselProvider({ node, content, ctx, dom }) {
             track.style.transition = "none";
         }
         track.style.transform = `translate3d(-${offset}px, 0, 0)`;
-        // The `even` style follows the slide's place in view, not its number:
-        // the 2nd, 4th… visible slide is the "even" one, so a staggered
-        // slider keeps the same up/down rhythm however far it has moved.
-        const first = indexRef.current;
-        Array.from(track.children).forEach((slide, i) => {
-            slide.classList.toggle("is-even", (((i - first) % 2) + 2) % 2 === 1);
-        });
     }, []);
     // How far a non-loop track can travel: the last slide stops at the right
     // edge instead of being pulled to the left with empty space after it.
@@ -290,12 +292,12 @@ function CarouselProvider({ node, content, ctx, dom }) {
             return;
         const N = originalSlideCount;
         if (isInfinite) {
-            if (indexRef.current >= 3 * N - 1) {
+            if (indexRef.current + pageSize > 3 * N - 1) {
                 indexRef.current -= N;
                 applyTransform(indexRef.current * step, false);
                 void track.offsetHeight;
             }
-            indexRef.current += 1;
+            indexRef.current += pageSize;
             applyTransform(indexRef.current * step, true, 350);
             const realIdx = ((indexRef.current % N) + N) % N;
             setSelectedIndex(realIdx);
@@ -303,9 +305,10 @@ function CarouselProvider({ node, content, ctx, dom }) {
             transitionTimerRef.current = setTimeout(checkLoopSettle, 400);
         }
         else {
-            if (indexRef.current >= getMaxIndex())
+            const maxIndex = getMaxIndex();
+            if (indexRef.current >= maxIndex)
                 return;
-            indexRef.current += 1;
+            indexRef.current = Math.min(indexRef.current + pageSize, maxIndex);
             applyTransform(offsetFor(indexRef.current), true, 350);
             syncEdgeState(indexRef.current);
         }
@@ -317,6 +320,7 @@ function CarouselProvider({ node, content, ctx, dom }) {
         isInfinite,
         offsetFor,
         originalSlideCount,
+        pageSize,
         syncEdgeState,
     ]);
     const scrollPrev = React.useCallback(() => {
@@ -329,12 +333,12 @@ function CarouselProvider({ node, content, ctx, dom }) {
             return;
         const N = originalSlideCount;
         if (isInfinite) {
-            if (indexRef.current <= 0) {
+            if (indexRef.current - pageSize < 0) {
                 indexRef.current += N;
                 applyTransform(indexRef.current * step, false);
                 void track.offsetHeight;
             }
-            indexRef.current -= 1;
+            indexRef.current -= pageSize;
             applyTransform(indexRef.current * step, true, 350);
             const realIdx = ((indexRef.current % N) + N) % N;
             setSelectedIndex(realIdx);
@@ -344,7 +348,11 @@ function CarouselProvider({ node, content, ctx, dom }) {
         else {
             if (indexRef.current <= 0)
                 return;
-            indexRef.current -= 1;
+            // From the end stop, step back onto the page grid (0, size, 2×size…).
+            const onGrid = indexRef.current % pageSize === 0;
+            indexRef.current = Math.max(0, onGrid
+                ? indexRef.current - pageSize
+                : indexRef.current - (indexRef.current % pageSize));
             applyTransform(offsetFor(indexRef.current), true, 350);
             syncEdgeState(indexRef.current);
         }
@@ -355,6 +363,7 @@ function CarouselProvider({ node, content, ctx, dom }) {
         isInfinite,
         offsetFor,
         originalSlideCount,
+        pageSize,
         syncEdgeState,
     ]);
     const scrollTo = React.useCallback((target) => {
@@ -508,7 +517,7 @@ function CarouselProvider({ node, content, ctx, dom }) {
                 // The end stop can sit between two step positions, so pick from the
                 // real stops rather than rounding by step.
                 const maxIndex = getMaxIndex();
-                const stops = Array.from({ length: maxIndex + 1 }, (_, i) => offsetFor(i));
+                const stops = Array.from({ length: maxIndex + 1 }, (_, i) => i % pageSize === 0 || i === maxIndex ? offsetFor(i) : NaN);
                 if (velocity < -0.2) {
                     const next = stops.findIndex((s) => s >= currentOffset - 0.5);
                     targetIndex = next === -1 ? maxIndex : next;
@@ -527,6 +536,9 @@ function CarouselProvider({ node, content, ctx, dom }) {
                         ? i
                         : best, 0);
                 }
+            }
+            else if (pageSize > 1) {
+                targetIndex = Math.round(targetIndex / pageSize) * pageSize;
             }
             indexRef.current = targetIndex;
             applyTransform(offsetFor(targetIndex), true, 350);
@@ -548,6 +560,7 @@ function CarouselProvider({ node, content, ctx, dom }) {
         isInfinite,
         offsetFor,
         originalSlideCount,
+        pageSize,
         syncEdgeState,
     ]);
     const onPointerUp = React.useCallback((e) => {
@@ -1040,9 +1053,6 @@ function ElementRenderer({ node, content, ctx, }) {
               box-sizing: border-box !important;
               user-select: none !important;
               -webkit-user-select: none !important;
-            }
-            .${trackId}-track > * {
-              transition: margin 350ms cubic-bezier(0.25, 1, 0.5, 1);
             }
             .${trackId}-track img {
               -webkit-user-drag: none !important;
