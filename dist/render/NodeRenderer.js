@@ -208,10 +208,15 @@ function CarouselProvider({ node, content, ctx, dom }) {
             : (containerWidth - (perView - 1) * gap) / perView;
         return Math.max(calculatedSlideWidth + gap, 50);
     }, [perView]);
+    // The last offset handed to applyTransform. In Fixed Frames mode the track
+    // itself never moves (its transform stays "none"), so drag can't read the
+    // position back from the track and reads it from here instead.
+    const lastOffsetRef = react_1.default.useRef(0);
     const applyTransform = react_1.default.useCallback((offset, withTransition = false, duration = 350) => {
         const track = trackRef.current;
         if (!track)
             return;
+        lastOffsetRef.current = offset;
         const easing = "cubic-bezier(0.25, 1, 0.5, 1)";
         if (slotModeRef.current) {
             // Frames stay put; each frame's strip slides its pictures.
@@ -554,8 +559,10 @@ function CarouselProvider({ node, content, ctx, dom }) {
         clearTimeout(transitionTimerRef.current);
         const style = window.getComputedStyle(track);
         const transform = style.transform;
-        let currentX = -indexRef.current * getStep();
-        if (transform && transform !== "none") {
+        let currentX = slotModeRef.current
+            ? -lastOffsetRef.current
+            : -indexRef.current * getStep();
+        if (!slotModeRef.current && transform && transform !== "none") {
             try {
                 const matrix = new DOMMatrixReadOnly(transform);
                 currentX = matrix.m41;
@@ -633,8 +640,12 @@ function CarouselProvider({ node, content, ctx, dom }) {
             if (step <= 0)
                 return;
             const style = window.getComputedStyle(track);
-            let currentX = -indexRef.current * step;
-            if (style.transform && style.transform !== "none") {
+            let currentX = slotModeRef.current
+                ? -lastOffsetRef.current
+                : -indexRef.current * step;
+            if (!slotModeRef.current &&
+                style.transform &&
+                style.transform !== "none") {
                 try {
                     const matrix = new DOMMatrixReadOnly(style.transform);
                     currentX = matrix.m41;
