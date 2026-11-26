@@ -8,5 +8,8 @@
     "moduleResolution": "bundler",
     "declaration": false,
     "outDir": "./dist-esm"
-  }
+  },
+  // Unlike the CJS build, compile the *.esm.tsx browser variants too
+  // (scripts/postbuild-esm.js swaps them in).
+  "exclude": ["node_modules", "dist", "dist-esm", "src/**/*.spec.ts"]
 }

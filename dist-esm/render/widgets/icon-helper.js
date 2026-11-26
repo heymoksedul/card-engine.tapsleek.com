@@ -1,5 +1,8 @@
 import { jsx as _jsx } from "react/jsx-runtime";
-import * as LucideIcons from "lucide-react";
+// Lucide: named imports only (see lucide-static.ts) — a namespace import
+// would ship the whole icon set to every card visitor.
+import { LUCIDE_STATIC } from "./lucide-static";
+import { LucideByName } from "./lucide-fallback";
 import { FaLinkedin } from "react-icons/fa";
 import { linkDef } from "../../catalog/links";
 import { useId } from "react";
@@ -182,14 +185,15 @@ export function RenderIcon({ name, className, colors, }) {
     }
     else {
         IconComponent =
-            LucideIcons[formatted] ??
-                LucideIcons[mapped] ??
-                LucideIcons[upper] ??
-                LucideIcons.Link2;
+            LUCIDE_STATIC[formatted] ?? LUCIDE_STATIC[mapped] ?? LUCIDE_STATIC[upper];
     }
+    const iconStyle = { width: "1em", height: "1em", flexShrink: 0 };
     return (_jsx("span", { className: className, "data-icon": formatted, "aria-hidden": true, style: {
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
-        }, children: _jsx(IconComponent, { style: { width: "1em", height: "1em", flexShrink: 0 }, ...(isFilledIcon ? { stroke: "none", strokeWidth: 0, fill: "currentColor" } : {}) }) }));
+        }, children: IconComponent ? (_jsx(IconComponent, { style: iconStyle, ...(isFilledIcon ? { stroke: "none", strokeWidth: 0, fill: "currentColor" } : {}) })) : (
+        // Any other Lucide name (e.g. an icon-picker pick): loaded on demand
+        // in browsers, falling back to Link2 when no icon has that name.
+        _jsx(LucideByName, { names: [formatted, String(mapped), upper], style: iconStyle })) }));
 }

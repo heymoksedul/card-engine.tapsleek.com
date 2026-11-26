@@ -1,4 +1,7 @@
-import * as LucideIcons from "lucide-react";
+// Lucide: named imports only (see lucide-static.ts) — a namespace import
+// would ship the whole icon set to every card visitor.
+import { LUCIDE_STATIC } from "./lucide-static";
+import { LucideByName } from "./lucide-fallback";
 import { FaLinkedin } from "react-icons/fa";
 import { linkDef } from "../../catalog/links";
 import { useId } from "react";
@@ -357,12 +360,10 @@ export function RenderIcon({
     isFilledIcon = true;
   } else {
     IconComponent =
-      (LucideIcons as any)[formatted] ??
-      (LucideIcons as any)[mapped] ??
-      (LucideIcons as any)[upper] ??
-      LucideIcons.Link2;
+      LUCIDE_STATIC[formatted] ?? LUCIDE_STATIC[mapped] ?? LUCIDE_STATIC[upper];
   }
 
+  const iconStyle = { width: "1em", height: "1em", flexShrink: 0 };
   return (
     <span
       className={className}
@@ -374,10 +375,16 @@ export function RenderIcon({
         justifyContent: "center",
       }}
     >
-      <IconComponent 
-        style={{ width: "1em", height: "1em", flexShrink: 0 }} 
-        {...(isFilledIcon ? { stroke: "none", strokeWidth: 0, fill: "currentColor" } : {})}
-      />
+      {IconComponent ? (
+        <IconComponent
+          style={iconStyle}
+          {...(isFilledIcon ? { stroke: "none", strokeWidth: 0, fill: "currentColor" } : {})}
+        />
+      ) : (
+        // Any other Lucide name (e.g. an icon-picker pick): loaded on demand
+        // in browsers, falling back to Link2 when no icon has that name.
+        <LucideByName names={[formatted, String(mapped), upper]} style={iconStyle} />
+      )}
     </span>
   );
 }

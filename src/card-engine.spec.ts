@@ -1781,3 +1781,40 @@ describe("item index system (1-based serial layers)", () => {
 });
 
 
+
+describe("Lucide icons (tree-shakeable)", () => {
+  const { RenderIcon } = require("./render/widgets/icon-helper");
+  const icon = (name: unknown) => renderToStaticMarkup(React.createElement(RenderIcon, { name }));
+
+  it("draws bundled icons synchronously", () => {
+    expect(icon("Star")).toContain("lucide-star");
+    expect(icon("zap")).toContain("lucide-zap");
+    expect(icon({ type: "react-icon", set: "lu", name: "LuHeart" })).toContain("lucide-heart");
+  });
+
+  it("draws any other Lucide icon synchronously on CJS servers", () => {
+    // The API renders documents with renderToStaticMarkup: no lazy chunks.
+    expect(icon("Anchor")).toContain("lucide-anchor");
+    expect(icon({ type: "react-icon", set: "lu", name: "LuAnchor" })).toContain("lucide-anchor");
+    expect(icon("NoSuchIconAnywhere")).toContain("lucide-link2");
+  });
+
+  it("loads other icons lazily in the browser build, with the same fallbacks", async () => {
+    const { LucideByName } = require("./render/widgets/lucide-fallback.esm");
+    const { prerenderToNodeStream } = require("react-dom/static");
+    const render = async (names: string[]) => {
+      const { prelude } = await prerenderToNodeStream(React.createElement(LucideByName, { names }));
+      let html = "";
+      for await (const chunk of prelude) html += chunk;
+      return html;
+    };
+    expect(await render(["Anchor"])).toContain("lucide-anchor");
+    expect(await render(["link-2"])).toContain("lucide-link2");
+    expect(await render(["Edit"])).toContain("lucide-pen-square"); // renamed alias
+    expect(await render(["AnchorIcon"])).toContain("lucide-anchor");
+    expect(await render(["NoSuchIconAnywhere", "nope"])).toContain("lucide-link2");
+    // Once loaded, later renders are synchronous (no placeholder).
+    const again = renderToStaticMarkup(React.createElement(LucideByName, { names: ["Anchor"] }));
+    expect(again).toContain("lucide-anchor");
+  });
+});

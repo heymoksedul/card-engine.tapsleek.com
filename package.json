@@ -30,7 +30,7 @@
     }
   },
   "scripts": {
-    "build": "tsc && tsc -p tsconfig.esm.json",
+    "build": "tsc && tsc -p tsconfig.esm.json && node scripts/postbuild-esm.js",
     "prepublishOnly": "npm run build",
     "dev": "tsc --watch",
     "test": "npx tsx scripts/run-spec.ts"
