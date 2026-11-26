@@ -17,6 +17,7 @@ exports.sanitizeTemplateDefinition = sanitizeTemplateDefinition;
 const value_1 = require("../compile/value");
 const definition_1 = require("../types/definition");
 const node_1 = require("../types/node");
+const fonts_1 = require("../catalog/fonts");
 const registry_1 = require("../widgets/registry");
 const schema_to_zod_1 = require("./schema-to-zod");
 const style_1 = require("./style");
@@ -283,7 +284,15 @@ function validateFonts(fonts, errors, warnings) {
         if (f.source === "self") {
             const files = f.files ?? {};
             const missing = (f.weights ?? []).filter((w) => !files[String(w)]);
-            if (missing.length) {
+            const noFiles = missing.length === (f.weights ?? []).length;
+            if (missing.length && noFiles && (0, fonts_1.isGoogleFont)(f.family)) {
+                // The compiler falls back to Google Fonts for this family.
+                warnings.push({
+                    path: `${p}.source`,
+                    message: `no self-hosted files — "${f.family}" loads from Google Fonts; set source to "google"`,
+                });
+            }
+            else if (missing.length) {
                 warnings.push({
                     path: `${p}.files`,
                     message: `no file for weight(s) ${missing.join(", ")} — those weights will not load`,

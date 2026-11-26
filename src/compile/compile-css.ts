@@ -42,7 +42,7 @@ import {
   walkTreeWithLayouts,
   type Node,
 } from "../types/node";
-import { isSystemFont } from "../catalog/fonts";
+import { isGoogleFont, isSystemFont } from "../catalog/fonts";
 import {
   BREAKPOINT_MEDIA,
   STATE_KEYS,
@@ -789,6 +789,22 @@ function compileFonts(
 
       if (font.source === "google") {
         addGoogleFamily(font.family, weights);
+        continue;
+      }
+
+      // A "self" font that has no uploaded files at all would otherwise load
+      // nothing AND stop the token-discovery pass below from fetching the
+      // family from Google — the card silently falls back to a system font.
+      // When the family is a Google font, load it from Google instead.
+      const hasAnyFile = weights.some((w) => {
+        const file = font.files?.[String(w)];
+        return !!file && !!safeUrl(joinUrl(options.fontBaseUrl, file));
+      });
+      if (!hasAnyFile && isGoogleFont(font.family)) {
+        addGoogleFamily(font.family, weights);
+        warnings.push(
+          `font ${font.family}: no self-hosted files, loading from Google Fonts`,
+        );
         continue;
       }
 

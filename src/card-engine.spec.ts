@@ -310,6 +310,44 @@ describe("compileCss", () => {
   });
 });
 
+describe("compileCss: fonts", () => {
+  it("loads a file-less self-hosted Google family from Google Fonts", () => {
+    const def = fixture();
+    def.fonts = [
+      { family: "Inter", source: "self", weights: [400, 600] },
+    ] as never;
+    def.tokens.font = { body: "Inter", heading: "Inter" } as never;
+    const r = compileCss(def);
+    expect(r.googleFontsHref ?? "").toContain("family=Inter");
+    expect(r.css).not.toContain('@font-face{font-family:"Inter"');
+  });
+
+  it("keeps a self-hosted font that has files self-hosted", () => {
+    const def = fixture();
+    def.fonts = [
+      {
+        family: "Inter",
+        source: "self",
+        weights: [400],
+        files: { "400": "https://cdn.example.com/inter-400.woff2" },
+      },
+    ] as never;
+    def.tokens.font = { body: "Inter" } as never;
+    const r = compileCss(def);
+    expect(r.css).toContain('@font-face{font-family:"Inter"');
+    expect(r.googleFontsHref ?? "").not.toContain("family=Inter");
+  });
+
+  it("does not send a file-less custom family to Google", () => {
+    const def = fixture();
+    def.fonts = [
+      { family: "Acme Brand Sans", source: "self", weights: [400] },
+    ] as never;
+    const r = compileCss(def);
+    expect(r.googleFontsHref ?? "").not.toContain("Acme");
+  });
+});
+
 describe("compileTokenOverrides", () => {
   it("emits only allowed colour tokens, in the override layer", () => {
     const css = compileTokenOverrides(
