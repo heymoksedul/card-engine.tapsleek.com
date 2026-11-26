@@ -174,7 +174,7 @@ export const meta: WidgetModule["meta"] = {
   },
   defaultDesign: { columns: "1", showLabels: true },
   defaultContent: {
-    title: "Get in touch",
+    title: "Exchange contact",
     description: "",
     fields: [
       {
