@@ -610,6 +610,19 @@ function compileFonts(def, options, warnings) {
                 addGoogleFamily(font.family, weights);
                 continue;
             }
+            // A "self" font that has no uploaded files at all would otherwise load
+            // nothing AND stop the token-discovery pass below from fetching the
+            // family from Google — the card silently falls back to a system font.
+            // When the family is a Google font, load it from Google instead.
+            const hasAnyFile = weights.some((w) => {
+                const file = font.files?.[String(w)];
+                return !!file && !!(0, value_1.safeUrl)(joinUrl(options.fontBaseUrl, file));
+            });
+            if (!hasAnyFile && (0, fonts_1.isGoogleFont)(font.family)) {
+                addGoogleFamily(font.family, weights);
+                warnings.push(`font ${font.family}: no self-hosted files, loading from Google Fonts`);
+                continue;
+            }
             selfHostedFamilies.add(font.family.trim().toLowerCase());
             const display = font.display ?? "swap";
             for (const weight of weights) {

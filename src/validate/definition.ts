@@ -39,6 +39,7 @@ import {
   type Node,
   type PrimitiveTag,
 } from "../types/node";
+import { isGoogleFont } from "../catalog/fonts";
 import { getWidgetMeta, hasWidget } from "../widgets/registry";
 import { validateAgainstSchema } from "./schema-to-zod";
 import { validateStyleSet, sanitizeStyleSet, type StyleIssue } from "./style";
@@ -376,7 +377,14 @@ function validateFonts(
     if (f.source === "self") {
       const files = f.files ?? {};
       const missing = (f.weights ?? []).filter((w) => !files[String(w)]);
-      if (missing.length) {
+      const noFiles = missing.length === (f.weights ?? []).length;
+      if (missing.length && noFiles && isGoogleFont(f.family)) {
+        // The compiler falls back to Google Fonts for this family.
+        warnings.push({
+          path: `${p}.source`,
+          message: `no self-hosted files — "${f.family}" loads from Google Fonts; set source to "google"`,
+        });
+      } else if (missing.length) {
         warnings.push({
           path: `${p}.files`,
           message: `no file for weight(s) ${missing.join(", ")} — those weights will not load`,

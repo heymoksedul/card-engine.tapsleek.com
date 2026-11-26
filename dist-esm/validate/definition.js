@@ -12,6 +12,7 @@
 import { IDENT_RE, normalizeImageUrl, safeUrl, utf8Bytes, VALUE_RE, } from "../compile/value";
 import { DEFINITION_LIMITS, SCHEMA_VERSION, TOKEN_GROUPS, } from "../types/definition";
 import { BINDING_FORMATS, CARD_FIELDS, CONTAINER_TAGS, countNodes, isElement, maxDepth, VOID_TAGS, walkTreeOrder, } from "../types/node";
+import { isGoogleFont } from "../catalog/fonts";
 import { getWidgetMeta, hasWidget } from "../widgets/registry";
 import { validateAgainstSchema } from "./schema-to-zod";
 import { validateStyleSet, sanitizeStyleSet } from "./style";
@@ -278,7 +279,15 @@ function validateFonts(fonts, errors, warnings) {
         if (f.source === "self") {
             const files = f.files ?? {};
             const missing = (f.weights ?? []).filter((w) => !files[String(w)]);
-            if (missing.length) {
+            const noFiles = missing.length === (f.weights ?? []).length;
+            if (missing.length && noFiles && isGoogleFont(f.family)) {
+                // The compiler falls back to Google Fonts for this family.
+                warnings.push({
+                    path: `${p}.source`,
+                    message: `no self-hosted files — "${f.family}" loads from Google Fonts; set source to "google"`,
+                });
+            }
+            else if (missing.length) {
                 warnings.push({
                     path: `${p}.files`,
                     message: `no file for weight(s) ${missing.join(", ")} — those weights will not load`,
